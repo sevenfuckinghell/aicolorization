@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output
+.next/
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+venv/
+.venv/
+env/
+
+# Testing / coverage
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+playwright-report/
+test-results/
+
+# Environment variables — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Model checkpoints & data (large binaries; supply via MODEL_CHECKPOINT_PATH)
+*.pt
+*.pth
+*.ckpt
+checkpoints/
+model-training/data/raw/
+model-training/data/processed/
+
+# Logs & temp files
+*.log
+logs/
+tmp/
+*.tmp
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Warm off-white editorial canvas */
+  --canvas: 40 33% 96%;
+  --surface: 40 30% 99%;
+  --ink: 220 12% 18%;
+  --muted-ink: 220 9% 42%;
+  --line: 220 12% 86%;
+  /* Deep indigo accent */
+  --accent: 239 52% 42%;
+  --accent-hover: 239 52% 34%;
+  --accent-soft: 239 60% 94%;
+  --danger: 0 65% 45%;
+}
+
+.dark {
+  --canvas: 222 18% 10%;
+  --surface: 222 16% 14%;
+  --ink: 40 30% 94%;
+  --muted-ink: 220 10% 68%;
+  --line: 222 12% 26%;
+  --accent: 238 65% 66%;
+  --accent-hover: 238 70% 74%;
+  --accent-soft: 238 40% 22%;
+  --danger: 0 72% 66%;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  background-color: hsl(var(--canvas));
+  color: hsl(var(--ink));
+}
+
+/* Strong, always-visible focus styles for keyboard users */
+:focus-visible {
+  outline: 3px solid hsl(var(--accent));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
