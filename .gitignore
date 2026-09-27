@@ -1,54 +1,46 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
 
-# Next.js build output
+# Build output
 .next/
 out/
+dist/
+build/
 
-# Python
+# Python cache and artifacts
 __pycache__/
 *.py[cod]
-*$py.class
 *.egg-info/
-.eggs/
-build/
-dist/
-venv/
 .venv/
-env/
+venv/
 
-# Testing / coverage
-coverage/
-.coverage
-htmlcov/
-.pytest_cache/
-playwright-report/
-test-results/
-
-# Environment variables — never commit secrets
-.env
-.env.local
-.env.*.local
-
-# Model checkpoints & data (large binaries; supply via MODEL_CHECKPOINT_PATH)
+# Model checkpoints & data (large binaries)
 *.pt
 *.pth
 *.ckpt
 checkpoints/
-model-training/data/raw/
-model-training/data/processed/
+model-training/data/*
+!model-training/data/.gitkeep
+sample-data/**/*.tmp
 
-# Logs & temp files
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
 *.log
-logs/
-tmp/
-*.tmp
+npm-debug.log*
 
 # OS / editor
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
-*.swp
+
+# Test / coverage
+coverage/
+.pytest_cache/
+.vitest/
+playwright-report/
+test-results/

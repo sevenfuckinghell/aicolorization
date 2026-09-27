@@ -1,0 +1,33 @@
+# ColorRevive training configuration.
+# Copy and adjust paths; nothing here is used by the serving backend at runtime.
+
+data:
+  root: ./data/raw              # folder of RGB images (COCO val2017, personal photos, ...)
+  image_size: 256               # model input/output spatial size
+  val_split: 0.1                # fraction held out for validation
+  augment: true                 # random horizontal flips (albumentations hooks can extend this)
+
+model:
+  model_name: unet-lab-v1
+  input_channels: 1             # normalized L channel
+  output_channels: 2            # normalized a, b channels
+  base_channels: 64             # must match backend UNetConfig to serve directly
+  image_size: 256
+  version: "1.0.0"
+
+train:
+  epochs: 50
+  batch_size: 16
+  lr: 0.001
+  weight_decay: 0.0001
+  optimizer: adamw              # fixed in code (AdamW); kept for documentation
+  scheduler: cosine             # cosine annealing to zero over epochs
+  workers: 4
+  checkpoint_dir: ./checkpoints
+  device: auto                  # auto | cpu | cuda
+  seed: 42
+  early_stopping_patience: 0    # 0 disables early stopping
+  wandb: false                  # set true + install wandb for experiment logging
+
+eval:
+  max_samples: 32               # samples evaluated / shown in comparison grid
