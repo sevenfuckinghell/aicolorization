@@ -51,6 +51,8 @@ async def colorize(
     face_enhancement: str = Form("false"),
     denoise: str = Form("false"),
     output_format: OutputFormat = Form("png"),
+    chroma_strength: str = Form("1.0"),
+    black_preserve: str = Form("true"),
 ):
     settings = request.app.state.settings
     model = request.app.state.model
@@ -62,6 +64,11 @@ async def colorize(
         preserve = _parse_bool(preserve_contrast, "preserve_contrast")
         faces = _parse_bool(face_enhancement, "face_enhancement")
         denoise_flag = _parse_bool(denoise, "denoise")
+        try:
+            chroma_val = float(chroma_strength) if chroma_strength is not None else settings.color_chroma_strength
+        except (ValueError, TypeError):
+            chroma_val = settings.color_chroma_strength
+        black_val = _parse_bool(black_preserve, "black_preserve") if black_preserve is not None else settings.color_black_preserve
 
         data = await image.read()
         declared_mime = image.content_type
@@ -84,6 +91,8 @@ async def colorize(
                 face_enhancement=faces,
                 denoise_on=denoise_flag,
                 output_format=output_format,
+                chroma_strength=chroma_val,
+                black_preserve=black_val,
             )
 
             safe_stem = image_service.sanitize_filename(image.filename)
@@ -131,6 +140,8 @@ async def colorize(
                 height=output.height,
                 processing_time_ms=output.processing_time_ms,
                 model=output.model_name,
+                model_variant=output.model_variant,
+                device=output.device,
                 fallback_mode=output.fallback_mode,
                 image_base64=b64,
             )
@@ -163,7 +174,9 @@ async def info(request: Request) -> InfoResponse:
         api_version=settings.api_version,
         supported_formats=["image/jpeg", "image/png", "image/webp"],
         max_upload_mb=settings.max_upload_mb,
-        model_name=str(meta["model_name"]),
+        model_name=str(meta.get("model_name", "DDColor")),
+        model_variant=str(meta.get("model_variant", settings.ddcolor_model)),
+        device=str(meta.get("device", "cpu")),
         fallback_mode=bool(meta["fallback_mode"]),
     )
 
@@ -173,6 +186,7 @@ async def model_status(request: Request) -> ModelStatusResponse:
     meta = request.app.state.model.metadata()
     return ModelStatusResponse(
         model_name=str(meta["model_name"]),
+        model_variant=str(meta.get("model_variant", "")),
         loaded=bool(meta["loaded"]),
         device=str(meta["device"]),
         precision=str(meta["precision"]),

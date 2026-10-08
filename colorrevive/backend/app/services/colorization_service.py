@@ -1,12 +1,10 @@
 """End-to-end colorization pipeline service.
 
-Pipeline (conceptual flow required by the spec):
-
+Pipeline (DDColor AI inference):
     uploaded bytes -> validate & decode -> RGB uint8
-    -> resize for model -> RGB->Lab -> normalized L
-    -> model.predict (neural UNet or labeled fallback) -> normalized ab
-    -> combine L + ab -> Lab->RGB -> restore original size
-    -> optional denoise / contrast preservation / face enhancement
+    -> DDColor neural network inference (dual-decoder chrominance prediction)
+    -> combine with original luminance at native resolution
+    -> optional conservative enhancements (denoise / contrast preservation)
     -> clamp -> encode PNG/JPEG
 """
 
@@ -17,20 +15,17 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import numpy as np
-from skimage.color import rgb2lab
 
 from ..config import Settings
 from ..ml.inference import ColorizationModel
 from ..ml.postprocessing import (
     clamp_uint8,
-    combine_lab_rgb,
     denoise,
     encode_image,
     face_enhance,
     preserve_source_contrast,
     restore_size,
 )
-from ..ml.preprocessing import extract_normalized_l, resize_for_model
 from ..schemas import InferenceTimeoutError
 
 
@@ -42,10 +37,12 @@ class ColorizeOutput:
     height: int
     processing_time_ms: int
     model_name: str
+    model_variant: str
+    device: str
     fallback_mode: bool
 
 
-# Single-worker executor => serialized CPU inference queue + hard timeout.
+# ThreadPoolExecutor to serialize inference and protect device memory + enforce timeout.
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inference")
 
 
@@ -58,43 +55,40 @@ def run_colorization(
     face_enhancement: bool,
     denoise_on: bool,
     output_format: str,
+    chroma_strength: float | None = None,
+    black_preserve: bool | None = None,
 ) -> ColorizeOutput:
-    """Run the full pipeline with an inference timeout guard."""
-    target_size = settings.high_input_size if quality == "high" else settings.standard_input_size
+    """Run the DDColor neural colorization pipeline with an inference timeout guard."""
     start = time.perf_counter()
+    original_hw = (int(rgb_u8.shape[0]), int(rgb_u8.shape[1]))
 
     def _pipeline() -> tuple[np.ndarray, bool]:
-        # 1. Resize to model input while remembering original dimensions.
-        resized, original_hw = resize_for_model(rgb_u8, target_size)
+        # 1. Run deep-learning colorization
+        rgb_colored = model.predict(
+            rgb_u8,
+            quality=quality,
+            chroma_strength=chroma_strength,
+            black_preserve=black_preserve,
+        )
 
-        # 2. RGB -> Lab, extract normalized L.
-        lab = rgb2lab(resized)
-        l_norm = extract_normalized_l(lab)
+        # 2. Guarantee exact original dimensions
+        if rgb_colored.shape[:2] != original_hw:
+            rgb_colored = restore_size(rgb_colored, original_hw)
 
-        # 3. Predict chrominance (neural when a checkpoint is loaded).
-        ab_norm = model.predict(l_norm, input_size=target_size)
-
-        # 4. Recombine using the *source* luminance so the photograph's
-        #    tonal structure is never overwritten, then Lab -> RGB.
-        rgb_out = combine_lab_rgb(lab[..., 0], ab_norm)
-
-        # 5. Restore original dimensions exactly.
-        rgb_out = restore_size(rgb_out, original_hw)
-
-        # 6. Optional enhancements.
+        # 3. Optional conservative enhancements
         if denoise_on:
-            rgb_out = denoise(rgb_out)
+            rgb_colored = denoise(rgb_colored)
         if face_enhancement:
-            rgb_out = face_enhance(rgb_out)
-        if preserve_contrast:
+            rgb_colored = face_enhance(rgb_colored)
+        if preserve_contrast and model.fallback_active():
             gray = (
                 rgb_u8[..., 0] * 0.299
                 + rgb_u8[..., 1] * 0.587
                 + rgb_u8[..., 2] * 0.114
             ).astype(np.uint8)
-            rgb_out = preserve_source_contrast(gray, rgb_out)
+            rgb_colored = preserve_source_contrast(gray, rgb_colored)
 
-        return clamp_uint8(rgb_out), model.fallback_active()
+        return clamp_uint8(rgb_colored), model.fallback_active()
 
     try:
         future = _executor.submit(_pipeline)
@@ -102,7 +96,7 @@ def run_colorization(
     except TimeoutError as exc:
         raise InferenceTimeoutError() from exc
 
-    # 7. Encode.
+    # 4. Encode result to PNG / JPEG
     data, mime = encode_image(rgb_final, output_format)
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
@@ -113,6 +107,8 @@ def run_colorization(
         width=int(rgb_final.shape[1]),
         height=int(rgb_final.shape[0]),
         processing_time_ms=elapsed_ms,
-        model_name=str(meta["model_name"]),
+        model_name=str(meta.get("model_name", "DDColor")),
+        model_variant=str(meta.get("model_variant", settings.ddcolor_model)),
+        device=str(meta.get("device", "cpu")),
         fallback_mode=bool(fallback),
     )

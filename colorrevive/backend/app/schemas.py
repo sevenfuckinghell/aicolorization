@@ -30,6 +30,8 @@ class ColorizeResponse(BaseModel):
     height: int
     processing_time_ms: int
     model: str
+    model_variant: Optional[str] = None
+    device: Optional[str] = None
     fallback_mode: bool
     image_base64: Optional[str] = None
 
@@ -37,6 +39,8 @@ class ColorizeResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str = "ok"
     service: str
+    model_name: Optional[str] = None
+    model_variant: Optional[str] = None
     model_loaded: bool
     device: str
     fallback_mode: bool
@@ -48,11 +52,14 @@ class InfoResponse(BaseModel):
     supported_formats: list[str]
     max_upload_mb: int
     model_name: str
+    model_variant: Optional[str] = None
+    device: Optional[str] = None
     fallback_mode: bool
 
 
 class ModelStatusResponse(BaseModel):
     model_name: str
+    model_variant: Optional[str] = None
     loaded: bool
     device: str
     precision: str
@@ -82,7 +89,7 @@ PUBLIC_ERROR_MESSAGES: dict[str, str] = {
     "IMAGE_TOO_LARGE": "The image contains too many pixels to process safely.",
     "MISSING_FIELDS": "Required form fields (image, quality, output_format) are missing.",
     "INVALID_SETTINGS": "One or more settings have invalid values.",
-    "MODEL_UNAVAILABLE": "The colorization model is unavailable and fallback mode is disabled.",
+    "MODEL_UNAVAILABLE": "The DDColor model could not be loaded. Check model configuration and network/model cache.",
     "TIMEOUT": "Inference exceeded the configured time limit. Try a smaller image or Standard quality.",
     "SERVER_ERROR": "An unexpected internal error occurred. Please try again.",
 }
@@ -100,19 +107,19 @@ class ApiError(Exception):
 
 class ImageValidationError(ApiError):
     def __init__(self, code: str, message: str | None = None):
-        super().__init__(code, message, status_code=422 if code == "IMAGE_TOO_LARGE" else 400)
+        super().__init__(code=code, message=message, status_code=400)
+
+
+class SettingsError(ApiError):
+    def __init__(self, message: str):
+        super().__init__(code="INVALID_SETTINGS", message=message, status_code=400)
 
 
 class ModelUnavailableError(ApiError):
     def __init__(self, message: str | None = None):
-        super().__init__("MODEL_UNAVAILABLE", message, status_code=503)
+        super().__init__(code="MODEL_UNAVAILABLE", message=message, status_code=503)
 
 
 class InferenceTimeoutError(ApiError):
     def __init__(self, message: str | None = None):
-        super().__init__("TIMEOUT", message, status_code=504)
-
-
-class SettingsError(ApiError):
-    def __init__(self, message: str | None = None):
-        super().__init__("INVALID_SETTINGS", message, status_code=400)
+        super().__init__(code="TIMEOUT", message=message, status_code=504)

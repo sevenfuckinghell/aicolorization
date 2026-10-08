@@ -19,4 +19,6 @@ async def health(request: Request) -> HealthResponse:
         model_loaded=bool(meta["loaded"]),
         device=str(meta["device"]),
         fallback_mode=bool(meta["fallback_mode"]),
+        model_name=str(meta.get("model_name", "DDColor")),
+        model_variant=meta.get("model_variant"),
     )

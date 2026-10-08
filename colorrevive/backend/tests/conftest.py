@@ -17,7 +17,7 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setenv("TEMP_DIR", str(tmp_path / "tmp_uploads"))
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path / "storage"))
     monkeypatch.setenv("ENABLE_PERSISTENT_STORAGE", "false")
-    monkeypatch.setenv("ENABLE_FALLBACK_MODE", "true")
+    monkeypatch.setenv("ENABLE_FALLBACK_MODE", "false")
     monkeypatch.setenv("MAX_UPLOAD_MB", "10")
     monkeypatch.setenv("MAX_IMAGE_PIXELS", "25000000")
     monkeypatch.setenv("DEVICE", "cpu")

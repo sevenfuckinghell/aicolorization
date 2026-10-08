@@ -9,6 +9,7 @@ export interface ColorizeSettings {
   faceEnhancement: boolean;
   denoise: boolean;
   outputFormat: OutputFormat;
+  chromaStrength?: number;
 }
 
 export const DEFAULT_SETTINGS: ColorizeSettings = {
@@ -17,6 +18,7 @@ export const DEFAULT_SETTINGS: ColorizeSettings = {
   faceEnhancement: false,
   denoise: false,
   outputFormat: "png",
+  chromaStrength: 1.0,
 };
 
 /** Response of POST /api/v1/colorize */
@@ -29,6 +31,8 @@ export interface ColorizeResponse {
   height: number;
   processing_time_ms: number;
   model: string;
+  model_variant?: string;
+  device?: string;
   fallback_mode: boolean;
   image_base64: string;
 }
@@ -37,6 +41,8 @@ export interface ColorizeResponse {
 export interface HealthResponse {
   status: string;
   service: string;
+  model_name?: string;
+  model_variant?: string;
   model_loaded: boolean;
   device: string;
   fallback_mode?: boolean;
@@ -49,12 +55,15 @@ export interface ApiInfo {
   supported_formats: string[];
   max_upload_mb: number;
   model_name: string;
+  model_variant?: string;
+  device?: string;
   fallback_mode: boolean;
 }
 
 /** Response of GET /api/v1/model-status */
 export interface ModelStatus {
   model_name: string;
+  model_variant?: string;
   loaded: boolean;
   device: string;
   precision: string;
@@ -80,6 +89,8 @@ export interface ColorizeResult {
   height: number;
   processingTimeMs: number;
   model: string;
+  modelVariant?: string;
+  device?: string;
   fallbackMode: boolean;
   requestId: string;
 }

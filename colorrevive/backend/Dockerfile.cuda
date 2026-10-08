@@ -1,0 +1,33 @@
+# ColorRevive backend — NVIDIA GPU CUDA deployment image.
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEVICE=cuda \
+    COLORIZATION_ENGINE=ddcolor \
+    DDCOLOR_MODEL=piddnad/ddcolor_modelscope \
+    ENABLE_FALLBACK_MODE=false
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 libgl1-mesa-glx libglib2.0-0 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+# Filter torch/torchvision from requirements.txt to preserve official CUDA-optimized torch from base image
+RUN grep -v -E "^\s*torch(vision)?\b" requirements.txt > requirements_cuda.txt \
+    && pip install -r requirements_cuda.txt
+
+COPY app ./app
+
+RUN useradd -m apiuser && mkdir -p /app/tmp_uploads /app/models && chown -R apiuser:apiuser /app
+USER apiuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,36 +1,76 @@
 version: "3.9"
 
 services:
+  # Default CPU Backend Service
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    image: colorrevive-backend
+      dockerfile: Dockerfile.cpu
+    image: colorrevive-backend:cpu
     container_name: colorrevive-api
     ports:
       - "8000:8000"
     environment:
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000}
-      MODEL_CHECKPOINT_PATH: /app/checkpoints/colorization.pt
-      MODEL_NAME: ${MODEL_NAME:-unet-lab-v1}
-      DEVICE: ${DEVICE:-auto}
+      COLORIZATION_ENGINE: ${COLORIZATION_ENGINE:-ddcolor}
+      DDCOLOR_MODEL: ${DDCOLOR_MODEL:-piddnad/ddcolor_modelscope}
+      DDCOLOR_INPUT_SIZE: ${DDCOLOR_INPUT_SIZE:-512}
+      DEVICE: cpu
+      ENABLE_FALLBACK_MODE: ${ENABLE_FALLBACK_MODE:-false}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
       MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-25000000}
-      INFERENCE_TIMEOUT_SECONDS: ${INFERENCE_TIMEOUT_SECONDS:-60}
-      ENABLE_FALLBACK_MODE: ${ENABLE_FALLBACK_MODE:-true}
+      INFERENCE_TIMEOUT_SECONDS: ${INFERENCE_TIMEOUT_SECONDS:-120}
       ENABLE_PERSISTENT_STORAGE: ${ENABLE_PERSISTENT_STORAGE:-false}
       RESPONSE_MODE: ${RESPONSE_MODE:-base64}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
-      # Mount a trained checkpoint without rebuilding the image:
-      #   mkdir -p checkpoints && cp your-model.pt checkpoints/colorization.pt
-      - ./checkpoints:/app/checkpoints:ro
+      - ./models:/app/models
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30s
+    restart: unless-stopped
+
+  # GPU-accelerated Backend Service (Run with: docker compose --profile gpu up)
+  backend-gpu:
+    profiles: ["gpu"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cuda
+    image: colorrevive-backend:cuda
+    container_name: colorrevive-api-gpu
+    ports:
+      - "8000:8000"
+    environment:
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000}
+      COLORIZATION_ENGINE: ${COLORIZATION_ENGINE:-ddcolor}
+      DDCOLOR_MODEL: ${DDCOLOR_MODEL:-piddnad/ddcolor_modelscope}
+      DDCOLOR_INPUT_SIZE: ${DDCOLOR_INPUT_SIZE:-512}
+      DEVICE: cuda
+      ENABLE_FALLBACK_MODE: ${ENABLE_FALLBACK_MODE:-false}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-25000000}
+      INFERENCE_TIMEOUT_SECONDS: ${INFERENCE_TIMEOUT_SECONDS:-120}
+      ENABLE_PERSISTENT_STORAGE: ${ENABLE_PERSISTENT_STORAGE:-false}
+      RESPONSE_MODE: ${RESPONSE_MODE:-base64}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   frontend:

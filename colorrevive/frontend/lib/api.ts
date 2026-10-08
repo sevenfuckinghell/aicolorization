@@ -84,6 +84,9 @@ export function colorizeImage(
   form.append("face_enhancement", String(settings.faceEnhancement));
   form.append("denoise", String(settings.denoise));
   form.append("output_format", settings.outputFormat);
+  if (settings.chromaStrength !== undefined) {
+    form.append("chroma_strength", String(settings.chromaStrength));
+  }
 
   return new Promise<ColorizeResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();

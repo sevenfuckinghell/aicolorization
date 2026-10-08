@@ -35,6 +35,8 @@ interface BackendInfo {
   reachable: boolean;
   fallbackMode: boolean;
   modelName: string;
+  modelVariant?: string;
+  device?: string;
   maxUploadMb: number;
 }
 
@@ -61,6 +63,8 @@ export default function HomePage() {
             reachable: true,
             fallbackMode: info.fallback_mode,
             modelName: info.model_name,
+            modelVariant: info.model_variant,
+            device: info.device,
             maxUploadMb: info.max_upload_mb,
           });
         }
@@ -166,6 +170,8 @@ export default function HomePage() {
         height: response.height,
         processingTimeMs: response.processing_time_ms,
         model: response.model,
+        modelVariant: response.model_variant,
+        device: response.device,
         fallbackMode: response.fallback_mode,
         requestId: response.request_id,
       };
@@ -290,8 +296,8 @@ export default function HomePage() {
             <div className="mt-5 flex max-w-2xl items-start gap-2 rounded-lg border border-green-600/40 bg-green-600/10 px-3 py-2 text-sm">
               <CheckCircle2 aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-green-700 dark:text-green-400" />
               <span>
-                Neural model <strong>{backend.modelName}</strong> is loaded and
-                active.
+                Neural model <strong>{backend.modelName}</strong> {backend.modelVariant ? `(${backend.modelVariant})` : ""} is loaded on{" "}
+                <span className="font-mono uppercase font-semibold">{backend.device || "CPU"}</span> and ready.
               </span>
             </div>
           )}
@@ -335,11 +341,16 @@ export default function HomePage() {
           {result && fileInfo && (
             <div className="mt-10">
               <h2 className="text-2xl font-semibold">Result</h2>
-              {result.fallbackMode && (
+              {result.fallbackMode ? (
                 <p className="mt-2 inline-flex items-center gap-2 rounded-md bg-amber-500/15 px-3 py-1.5 text-sm font-medium text-amber-800 dark:text-amber-300">
                   <AlertTriangle aria-hidden className="h-4 w-4" />
                   Fallback mode output — deterministic heuristic coloring, not
                   neural AI prediction.
+                </p>
+              ) : (
+                <p className="mt-2 inline-flex items-center gap-2 rounded-md bg-green-600/15 px-3 py-1.5 text-sm font-medium text-green-800 dark:text-green-300">
+                  <Sparkles aria-hidden className="h-4 w-4 text-green-700 dark:text-green-400" />
+                  AI Colorization — DDColor pretrained model ({result.modelVariant || "piddnad/ddcolor_modelscope"})
                 </p>
               )}
               <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
@@ -395,13 +406,28 @@ export default function HomePage() {
                       </dt>
                       <dd>
                         {result.fallbackMode ? "fallback-heuristic" : result.model}
+                        {result.modelVariant && !result.fallbackMode && (
+                          <span className="block truncate text-xs text-muted">
+                            {result.modelVariant}
+                          </span>
+                        )}
                       </dd>
                     </div>
+                    {result.device && (
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                          Device
+                        </dt>
+                        <dd className="font-mono text-xs uppercase">
+                          {result.device}
+                        </dd>
+                      </div>
+                    )}
                     <div>
                       <dt className="text-xs font-medium uppercase tracking-wide text-muted">
                         Format
                       </dt>
-                      <dd>{result.mime_type}</dd>
+                      <dd>{result.mimeType}</dd>
                     </div>
                     <div className="col-span-2">
                       <dt className="text-xs font-medium uppercase tracking-wide text-muted">

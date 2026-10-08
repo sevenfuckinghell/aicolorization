@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="ColorRevive API",
         version=settings.api_version,
-        description="Black-and-white photo colorization service (Lab-space U-Net with labeled fallback).",
+        description="Black-and-white photo colorization service powered by pretrained DDColor deep-learning model (ICCV 2023).",
         lifespan=lifespan,
     )
     app.state.settings = settings

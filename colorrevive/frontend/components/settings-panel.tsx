@@ -31,6 +31,7 @@ export function SettingsPanel({
   const denoiseId = useId();
   const pngId = useId();
   const jpegId = useId();
+  const chromaId = useId();
 
   const set = <K extends keyof ColorizeSettings>(
     key: K,
@@ -180,6 +181,32 @@ export function SettingsPanel({
           </label>
         </div>
       </fieldset>
+ 
+      <div className="mt-5">
+        <div className="flex items-center justify-between text-sm">
+          <label htmlFor={chromaId} className="font-medium">
+            AI Color intensity
+          </label>
+          <span className="text-xs text-muted font-mono">
+            {Math.round((settings.chromaStrength ?? 1.0) * 100)}%
+          </span>
+        </div>
+        <input
+          id={chromaId}
+          type="range"
+          min="0.5"
+          max="1.3"
+          step="0.05"
+          value={settings.chromaStrength ?? 1.0}
+          onChange={(e) => set("chromaStrength", parseFloat(e.target.value))}
+          className="mt-2 w-full accent-[hsl(var(--accent))]"
+        />
+        <div className="mt-1 flex justify-between text-[11px] text-muted">
+          <span>Subtle (50%)</span>
+          <span>Natural AI (100%)</span>
+          <span>Vibrant (130%)</span>
+        </div>
+      </div>
 
       <button
         type="button"

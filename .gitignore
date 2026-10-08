@@ -18,10 +18,22 @@ venv/
 *.pt
 *.pth
 *.ckpt
+*.bin
+*.safetensors
+*.onnx
 checkpoints/
+models/
 model-training/data/*
 !model-training/data/.gitkeep
 sample-data/**/*.tmp
+colorrevive/sample-data/benchmark/
+colorrevive/sample-data/diag_*
+colorrevive/sample-data/tune_*
+colorrevive/sample-data/compare_*
+colorrevive/sample-data/*-colorized.png
+colorrevive/sample-data/*-result.png
+colorrevive/sample-data/output-*
+colorrevive/sample-data/test_*
 
 # Environment & secrets
 .env

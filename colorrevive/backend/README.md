@@ -1,66 +1,153 @@
-# ColorRevive Backend (FastAPI + PyTorch)
+# ColorRevive Backend (FastAPI + PyTorch + DDColor)
 
-Image validation, Lab-space preprocessing, U-Net colorization inference with a
-deterministic fallback mode, and PNG/JPEG encoding.
+Production image colorization service powered by the pretrained **DDColor** deep-learning model (ICCV 2023). Converts black-and-white or historical grayscale photos into realistic, semantically rich color images while preserving original luminance and native image dimensions.
 
-## Run locally
+---
+
+## Key Features
+
+- **Pretrained DDColor Model**: ConvNeXt-Large backbone + Dual Pixel & Color Decoders trained on diverse real-world photographic datasets.
+- **Semantic Color Prediction**: Predicts natural skin tones, hair colors, sky blues, foliage greens, and clothing textures — no heuristic tinting or lookup tables.
+- **Native Quality Preservation**: Original input resolution is completely preserved (e.g. 600×900 in → 600×900 out); original luminance ($L$-channel) is combined with predicted chrominance ($a, b$) in CIE Lab space.
+- **Hardware Acceleration**: Automatic GPU detection (`DEVICE=auto`), explicit CUDA execution (`DEVICE=cuda`), or optimized CPU inference (`DEVICE=cpu`).
+- **Automatic Model Download & Caching**: Hugging Face Hub integration downloads weights on first run and caches them locally (`~/.cache/huggingface/hub`).
+- **No Fake Fallback**: `ENABLE_FALLBACK_MODE=false` by default. Returns clear `MODEL_UNAVAILABLE` error if weights are missing rather than deceptive heuristic output.
+- **Thread-Safe Model Singleton**: Model loaded and warmed up once at application startup; guarded inference lock for concurrent safety.
+
+---
+
+## Run Locally
+
+### 1. Set Up Python Environment
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+# Windows (PowerShell)
+cd colorrevive/backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+
+# Linux / macOS
+cd colorrevive/backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-- Swagger UI: http://localhost:8000/docs
-- Health: `curl localhost:8000/health` → reports `model_loaded` / `fallback_mode` dynamically.
+### 2. Launch the API Server
 
-## Configuration
+```bash
+# Default port 8000 (or --port 8001 if 8000 is occupied)
+uvicorn app.main:app --host 127.0.0.1 --port 8001
+```
 
-All settings come from environment variables (see `../.env.example`); copy it to
-`.env` in this directory to override defaults. Key ones:
+On first startup, the server automatically downloads `piddnad/ddcolor_modelscope` (~500 MB) from Hugging Face Hub, loads it onto the detected device (CUDA or CPU), and runs a warmup pass.
 
-| Var | Default | Meaning |
+- **Swagger UI**: http://127.0.0.1:8001/docs
+- **Health Check**: `curl http://127.0.0.1:8001/health`
+- **Model Status**: `curl http://127.0.0.1:8001/api/v1/model-status`
+- **Service Info**: `curl http://127.0.0.1:8001/api/v1/info`
+
+---
+
+## Configuration (Environment Variables)
+
+Configuration is managed via Pydantic Settings and driven by environment variables:
+
+| Variable | Default | Description |
 |---|---|---|
-| `MODEL_CHECKPOINT_PATH` | `./checkpoints/colorization.pt` | Trained U-Net checkpoint; missing ⇒ fallback |
-| `DEVICE` | `auto` | `auto`/`cpu`/`cuda` |
-| `MAX_UPLOAD_MB` | `10` | Hard upload cap |
-| `MAX_IMAGE_PIXELS` | `25000000` | Decompression-bomb guard |
-| `INFERENCE_TIMEOUT_SECONDS` | `60` | Per-request inference timeout |
-| `RESPONSE_MODE` | `base64` | `base64` JSON or raw `binary` response |
-| `ENABLE_PERSISTENT_STORAGE` | `false` | Keep outputs after response (off by default for privacy) |
+| `COLORIZATION_ENGINE` | `ddcolor` | Colorization engine (`ddcolor`) |
+| `DDCOLOR_MODEL` | `piddnad/ddcolor_modelscope` | Model variant: `ddcolor_modelscope` (vibrant), `ddcolor_paper` (balanced natural), `ddcolor_artistic` |
+| `DDCOLOR_INPUT_SIZE` | `512` | Model inference resolution (`512` or `768`) |
+| `DDCOLOR_INPUT_SIZE_HIGH` | `768` | High quality inference resolution |
+| `DDCOLOR_MODEL_DIR` | `./models` | Configurable directory for custom weights |
+| `COLOR_CHROMA_STRENGTH` | `1.0` | Chrominance scaling (1.0 = raw prediction, 0.85 = subtle natural) |
+| `COLOR_BLACK_PRESERVE` | `true` | Preserves deep shadows and highlights by attenuating chroma at luminance extremes |
+| `DEVICE` | `auto` | Device selection: `auto` (CUDA if available, else CPU), `cpu`, `cuda` |
+| `ENABLE_FALLBACK_MODE` | `false` | When `false`, returns clear error if AI is unavailable |
+| `MAX_UPLOAD_MB` | `10` | Maximum upload file size in megabytes |
+| `MAX_IMAGE_PIXELS` | `25000000` | Decompression-bomb safety threshold |
+| `INFERENCE_TIMEOUT_SECONDS`| `120` | Maximum seconds allowed per inference request |
+| `API_CORS_ORIGINS` | `http://localhost:3000` | Comma-separated list of allowed CORS origins |
+
+---
 
 ## Endpoints
 
-`GET /health` · `GET /api/v1/info` · `GET /api/v1/model-status` ·
-`POST /api/v1/colorize` · `POST /api/v1/validate-image` — full reference in
-[`../docs/api.md`](../docs/api.md).
+### `GET /health`
+Returns dynamic server and model readiness:
+```json
+{
+  "status": "ok",
+  "service": "colorrevive-api",
+  "model_loaded": true,
+  "model_name": "DDColor",
+  "model_variant": "piddnad/ddcolor_modelscope",
+  "device": "cpu",
+  "fallback_mode": false
+}
+```
 
-## Tests
+### `GET /api/v1/model-status`
+Detailed neural model diagnostics:
+```json
+{
+  "model_name": "DDColor",
+  "model_variant": "piddnad/ddcolor_modelscope",
+  "loaded": true,
+  "device": "cpu",
+  "precision": "float32",
+  "version": "ICCV 2023",
+  "fallback_mode": false
+}
+```
+
+### `POST /api/v1/colorize`
+Multipart form upload for colorization:
+- `image`: Uploaded image file (JPEG, PNG, WEBP)
+- `quality`: `"standard"` (512px internal) or `"high"` (768px internal)
+- `preserve_contrast`: `"true"` (default)
+- `output_format`: `"png"` or `"jpeg"`
+
+Returns:
+```json
+{
+  "success": true,
+  "request_id": "936657c9-4673-455b-861f-d27e2ee677bf",
+  "filename": "colorrevive-photo-colorized.png",
+  "mime_type": "image/png",
+  "width": 640,
+  "height": 480,
+  "processing_time_ms": 1180,
+  "model": "DDColor",
+  "model_variant": "piddnad/ddcolor_modelscope",
+  "device": "cpu",
+  "fallback_mode": false,
+  "image_base64": "..."
+}
+```
+
+---
+
+## Docker Deployment
+
+### CPU Container
+```bash
+docker build -f Dockerfile.cpu -t colorrevive-backend:cpu .
+docker run -p 8001:8001 -e DEVICE=cpu colorrevive-backend:cpu
+```
+
+### GPU (CUDA) Container
+```bash
+docker build -f Dockerfile.cuda -t colorrevive-backend:cuda .
+docker run --gpus all -p 8001:8001 -e DEVICE=cuda colorrevive-backend:cuda
+```
+
+---
+
+## Running Automated Tests
 
 ```bash
-pip install pytest httpx
-python -m pytest -q          # 28 tests: API, errors, preprocessing shapes/ranges, model, cleanup
+python -m pytest
 ```
-
-## Layout
-
-```
-app/
-  main.py        # FastAPI factory, CORS, lifespan (model loaded once at startup)
-  config.py      # pydantic-settings env config
-  schemas.py     # request/response models + error taxonomy
-  api/           # route handlers (thin; no business logic)
-  services/      # colorization orchestration, image safety, storage/temp cleanup
-  ml/            # model.py (U-Net), inference.py, preprocessing/postprocessing (Lab),
-                 # checkpoint_loader.py (torch.load with weights_only-safe path checks)
-  utils/         # structured logging (request IDs, no image bytes), error envelope
-```
-
-## Safety notes
-
-- Filenames from uploads are never trusted; server-side UUIDs are used.
-- Temp files are deleted after the response (`retention_seconds=0` default).
-- Inference runs under `torch.no_grad()` + `eval()` behind a lock so CPU
-  requests queue instead of thrashing.
-- Logs contain request IDs, dimensions, timings, and error categories only —
-  never pixel data.
+Runs 27 automated tests covering health checks, model status, DDColor inference, monochrome detection, corrupted image handling, size caps, and error taxonomy.

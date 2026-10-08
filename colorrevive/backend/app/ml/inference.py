@@ -1,194 +1,238 @@
-"""Colorization model service: real UNet inference + deterministic fallback.
+"""Colorization model service: clean abstraction over deep-learning engines.
 
-Exposes the required clean interface:
+Exposes the unified production interface:
 
     class ColorizationModel:
         def load(self) -> None
-        def predict(self, l_channel: np.ndarray) -> np.ndarray
+        def predict(self, image: np.ndarray, quality: str = "standard", **kwargs) -> np.ndarray
         def is_loaded(self) -> bool
-        def metadata(self) -> dict
+        def metadata(self) -> dict[str, Any]
+        def fallback_active(self) -> bool
 
-The training code in ``model-training/`` is never imported at runtime; this
-module only depends on the inference-side architecture definition.
+By default, loads and serves the official pre-trained DDColor neural network
+(ICCV 2023). Deterministic fallback is disabled by default in production.
+If the AI model cannot be loaded, a clear MODEL_UNAVAILABLE error is raised.
 """
 
 from __future__ import annotations
 
 import threading
+from typing import Any
 
+import cv2
 import numpy as np
 import torch
 
 from ..config import Settings
+from ..schemas import ModelUnavailableError
 from ..utils.logging import get_logger, log_fields
-from .checkpoint_loader import CheckpointError, load_checkpoint
-from .model import UNetConfig, build_model
-from .preprocessing import l_to_tensor
+from .ddcolor_engine import DDColorEngine
 
 logger = get_logger("colorrevive.model")
 
 
 class ColorizationModel:
-    """Loads a checkpoint once (or falls back) and predicts ab channels."""
+    """Thread-safe facade managing the active colorization neural network."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self._torch_model: torch.nn.Module | None = None
-        self._device = "cpu"
-        self._precision = "float32"
-        self._fallback = True
+        self.engine_type = settings.colorization_engine.lower()
         self._lock = threading.Lock()
-        self._config = UNetConfig(
-            input_channels=1,
-            output_channels=2,
-            base_channels=64,
-            image_size=settings.standard_input_size,
-            model_name=settings.model_name,
-        )
+        self._fallback = False
+        self._load_error: str | None = None
 
-    # ------------------------------------------------------------------ API
+        if self.engine_type == "ddcolor":
+            self._engine: DDColorEngine | None = DDColorEngine(
+                model_name=settings.ddcolor_model,
+                model_dir=settings.ddcolor_model_dir,
+                device_name=settings.device,
+                input_size=settings.standard_input_size,
+                high_input_size=settings.high_input_size,
+                chroma_strength=settings.color_chroma_strength,
+                black_preserve=settings.color_black_preserve,
+            )
+        else:
+            self._engine = None
+
+    # ------------------------------------------------------------------ Lifecycle
 
     def load(self) -> None:
-        """Load the checkpoint if configured; otherwise enable fallback mode.
+        """Load the model into memory once.
 
-        Called once at application startup (lazily guarded by a lock).
-        Never raises: a broken checkpoint degrades to fallback with a warning.
+        Called at application startup. If model loading fails and fallback mode
+        is disabled (the default), raises ModelUnavailableError immediately.
         """
         with self._lock:
-            if self._torch_model is not None or not self._fallback:
+            if self.is_loaded():
                 return
-            path = self.settings.checkpoint_file
-            if path.is_file():
+
+            if self._engine is not None:
                 try:
-                    device = self._resolve_device()
-                    model = load_checkpoint(path, self._config)
-                    model.to(device)
-                    model.eval()
-                    self._torch_model = model
-                    self._device = str(device)
+                    self._engine.load()
                     self._fallback = False
-                    log_fields(
-                        logger, "info", "checkpoint loaded",
-                        model=self.settings.model_name, device=self._device,
-                    )
+                    self._load_error = None
                     return
-                except CheckpointError as exc:
+                except Exception as exc:
+                    self._load_error = str(exc)
                     log_fields(
-                        logger, "warning", "checkpoint failed to load; using fallback",
+                        logger,
+                        "error",
+                        "failed to load DDColor model",
                         reason=str(exc),
                     )
-            if not self.settings.enable_fallback_mode:
-                from ..schemas import ModelUnavailableError
 
-                raise ModelUnavailableError(
-                    "No usable checkpoint found and fallback mode is disabled."
+            # If fallback is explicitly enabled, fall back safely with clear labeling
+            if self.settings.enable_fallback_mode:
+                self._fallback = True
+                log_fields(
+                    logger,
+                    "warning",
+                    "running in deterministic fallback mode (explicitly enabled)",
                 )
-            self._fallback = True
-            log_fields(logger, "info", "running in deterministic fallback mode")
+                return
+
+            # Normal path: Fail clearly when AI model is unavailable
+            self._fallback = False
+            raise ModelUnavailableError(
+                f"The {self.settings.ddcolor_model} model could not be loaded. "
+                "Check model configuration and network/model cache."
+            )
 
     def is_loaded(self) -> bool:
-        return self._torch_model is not None
+        if self._engine is not None:
+            return self._engine.is_loaded()
+        return self._fallback
 
     def fallback_active(self) -> bool:
-        return self._fallback or self._torch_model is None
+        return self._fallback or (not self.is_loaded() and self.settings.enable_fallback_mode)
 
-    def metadata(self) -> dict:
+    def metadata(self) -> dict[str, Any]:
+        if self._engine is not None and self._engine.is_loaded():
+            meta = self._engine.metadata()
+            meta["fallback_mode"] = False
+            return meta
+
+        if self.fallback_active():
+            return {
+                "model_name": "fallback-heuristic",
+                "model_variant": "deterministic-lut",
+                "loaded": False,
+                "device": "cpu",
+                "precision": "float32",
+                "version": "fallback",
+                "fallback_mode": True,
+            }
+
         return {
-            "model_name": self.settings.model_name if not self.fallback_active() else "fallback-heuristic",
-            "loaded": self.is_loaded(),
-            "device": self._device,
-            "precision": self._precision,
-            "version": self._config.version,
-            "fallback_mode": self.fallback_active(),
-            "input_channels": self._config.input_channels,
-            "output_channels": self._config.output_channels,
-            "base_channels": self._config.base_channels,
+            "model_name": "DDColor",
+            "model_variant": self.settings.ddcolor_model,
+            "loaded": False,
+            "device": self.settings.device,
+            "precision": "float32",
+            "version": "unavailable",
+            "fallback_mode": False,
+            "error": self._load_error,
         }
 
-    def predict(self, l_channel: np.ndarray, input_size: int | None = None) -> np.ndarray:
-        """Predict normalized ab channels for a normalized L channel.
+    # ------------------------------------------------------------------ Inference
+
+    def predict(
+        self,
+        image: np.ndarray,
+        quality: str = "standard",
+        chroma_strength: float | None = None,
+        black_preserve: bool | None = None,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        """Run colorization inference.
 
         Args:
-            l_channel: float32 HxW array with values in [-1, 1].
-            input_size: unused for the fallback; kept for interface parity.
+            image: H x W x 3 uint8 RGB array (or 2D grayscale array).
+            quality: 'standard' or 'high'.
+            chroma_strength: Multiplier for chrominance intensity.
+            black_preserve: Smoothly attenuates chrominance in deep shadows and specular highlights.
 
         Returns:
-            float32 HxWx2 array with a,b in [-1, 1].
+            H x W x 3 uint8 RGB array with predicted colors at original dimensions.
         """
-        self.load()
-        if self._torch_model is not None:
-            return self._predict_neural(l_channel)
-        return self._predict_fallback(l_channel)
+        # Ensure image is in RGB uint8 format (H, W, 3)
+        rgb_input = self._ensure_rgb(image)
 
-    # ------------------------------------------------------------- internals
+        if self._engine is not None and self._engine.is_loaded():
+            return self._engine.predict(
+                rgb_input,
+                quality=quality,
+                chroma_strength=chroma_strength,
+                black_preserve=black_preserve,
+            )
 
-    def _resolve_device(self) -> torch.device:
-        want = self.settings.device.lower()
-        cuda_ok = torch.cuda.is_available()
-        if want == "cuda":
-            if not cuda_ok:
-                log_fields(logger, "warning", "CUDA requested but unavailable; using CPU")
-                return torch.device("cpu")
-            return torch.device("cuda")
-        if want == "auto":
-            return torch.device("cuda" if cuda_ok else "cpu")
-        return torch.device("cpu")
+        if self.fallback_active():
+            return self._predict_fallback(rgb_input)
 
-    @torch.no_grad()
-    def _predict_neural(self, l_channel: np.ndarray) -> np.ndarray:
-        assert self._torch_model is not None
-        tensor = l_to_tensor(np.ascontiguousarray(l_channel)).to(self._device)
-        with self._lock:
-            out = self._torch_model(tensor)
-        out = out.squeeze(0).permute(1, 2, 0).float().cpu().numpy()
-        return np.clip(out, -1.0, 1.0).astype(np.float32)
+        raise ModelUnavailableError(
+            "The DDColor model could not be loaded. Check model configuration and network/model cache."
+        )
 
-    def _predict_fallback(self, l_channel: np.ndarray) -> np.ndarray:
-        """DETERMINISTIC HEURISTIC — NOT NEURAL AI COLORIZATION.
+    def _ensure_rgb(self, img: np.ndarray) -> np.ndarray:
+        """Ensure input array is a 3-channel uint8 RGB image."""
+        if img.ndim == 2:
+            # Grayscale 2D
+            if img.dtype != np.uint8:
+                if img.min() >= -1.01 and img.max() <= 1.01:
+                    img = ((img + 1.0) / 2.0 * 255.0).clip(0, 255).astype(np.uint8)
+                else:
+                    img = img.clip(0, 255).astype(np.uint8)
+            return cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 
-        A classic Zhang et al. (2016) style approach: cluster luminance
-        histograms of natural color images into coarse bins and map each bin
-        to the mean chrominance observed for that luminance range. The mapping
-        table below is hard-coded from typical outdoor/daylight statistics, so
-        skies trend blue, foliage trends green, mid-tones trend warm.
+        if img.ndim == 3:
+            if img.shape[2] == 1:
+                return cv2.cvtColor(img.squeeze(2), cv2.COLOR_GRAY2RGB)
+            if img.dtype != np.uint8:
+                img = img.clip(0, 255).astype(np.uint8)
+            return img
 
-        Properties: fully deterministic, no randomness, cheap, and clearly
-        labeled as fallback everywhere it surfaces.
-        """
-        import cv2
+        raise ValueError(f"Invalid image array shape: {img.shape}")
 
-        # Coarse quantization of L in [-1,1] into 12 luminance bins.
+    def _predict_fallback(self, rgb_u8: np.ndarray) -> np.ndarray:
+        """DETERMINISTIC HEURISTIC (used ONLY when explicitly enabled)."""
+        gray = cv2.cvtColor(rgb_u8, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
         bins = 12
-        idx = np.clip(((l_channel + 1.0) / 2.0 * bins).astype(np.int32), 0, bins - 1)
-        # Mean (a, b) per luminance bin, in normalized [-1,1] units.
+        idx = np.clip((gray * bins).astype(np.int32), 0, bins - 1)
         lut_a = np.array([-0.05, -0.04, -0.03, -0.02, 0.00, 0.02,
                           0.04, 0.05, 0.05, 0.04, 0.03, 0.02], dtype=np.float32)
         lut_b = np.array([0.10, 0.16, 0.24, 0.30, 0.32, 0.30,
                           0.24, 0.16, 0.08, 0.02, -0.02, -0.05], dtype=np.float32)
-        a = lut_a[idx]
-        b = lut_b[idx]
-        ab = np.stack([a, b], axis=-1).astype(np.float32)
-        # Blur chroma for a smooth, painterly, fully deterministic result.
-        ab = cv2.GaussianBlur(ab, (0, 0), sigmaX=max(2.0, l_channel.shape[0] / 40.0))
-        return np.clip(ab, -1.0, 1.0).astype(np.float32)
+        a = (lut_a[idx] * 128.0 + 128.0).astype(np.uint8)
+        b = (lut_b[idx] * 128.0 + 128.0).astype(np.uint8)
+        l_ch = (gray * 255.0).astype(np.uint8)
+        lab = np.stack([l_ch, a, b], axis=-1)
+        return cv2.cvtColor(lab, cv2.COLOR_Lab2RGB)
 
 
-# Module-level singleton loaded once per process (never per request).
+# Module-level singleton
 _model_singleton: ColorizationModel | None = None
 _singleton_lock = threading.Lock()
 
 
-def get_colorization_model(settings: Settings) -> ColorizationModel:
+def get_colorization_model(settings: Settings | None = None) -> ColorizationModel:
+    """Return the shared ColorizationModel instance, creating it if needed."""
     global _model_singleton
     with _singleton_lock:
         if _model_singleton is None:
+            if settings is None:
+                from ..config import get_settings
+
+                settings = get_settings()
             _model_singleton = ColorizationModel(settings)
-            _model_singleton.load()
+            try:
+                _model_singleton.load()
+            except Exception as exc:
+                logger.warning("ColorizationModel startup load deferred/failed: %s", exc)
         return _model_singleton
 
 
 def reset_model_singleton() -> None:
-    """Test helper to drop the cached model."""
+    """Reset the model singleton (used in test fixtures)."""
     global _model_singleton
     with _singleton_lock:
         _model_singleton = None

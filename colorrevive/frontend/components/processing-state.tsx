@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils";
 
 const PHASES: Array<{ key: ProcessingPhase; label: string }> = [
   { key: "uploading", label: "Uploading image" },
-  { key: "preparing", label: "Preparing image" },
-  { key: "running-model", label: "Running colorization model" },
-  { key: "postprocessing", label: "Applying post-processing" },
-  { key: "preparing-download", label: "Preparing download" },
+  { key: "preparing", label: "Analyzing image and preparing inputs" },
+  { key: "running-model", label: "Running colorization model (DDColor AI)" },
+  { key: "postprocessing", label: "Reconstructing high-resolution image" },
+  { key: "preparing-download", label: "Finalizing output" },
 ];
 
 interface ProcessingStateProps {
