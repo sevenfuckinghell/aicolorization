@@ -1,7 +1,8 @@
 /** Shared type definitions for the ColorRevive frontend. */
 
-export type Quality = "standard" | "high";
+export type Quality = "standard" | "high" | "maximum";
 export type OutputFormat = "png" | "jpeg";
+export type ColorGradingPreset = "natural" | "vivid" | "cinematic" | "original_ai";
 
 export interface ColorizeSettings {
   quality: Quality;
@@ -10,6 +11,12 @@ export interface ColorizeSettings {
   denoise: boolean;
   outputFormat: OutputFormat;
   chromaStrength?: number;
+  blackPreserve?: boolean;
+  edgeRefinement?: boolean;
+  modelVariant?: string;
+  colorGrading?: ColorGradingPreset;
+  sharpening?: boolean;
+  sharpeningStrength?: number;
 }
 
 export const DEFAULT_SETTINGS: ColorizeSettings = {
@@ -19,6 +26,12 @@ export const DEFAULT_SETTINGS: ColorizeSettings = {
   denoise: false,
   outputFormat: "png",
   chromaStrength: 1.0,
+  blackPreserve: true,
+  edgeRefinement: true,
+  modelVariant: "piddnad/ddcolor_modelscope",
+  colorGrading: "natural",
+  sharpening: true,
+  sharpeningStrength: 0.35,
 };
 
 /** Response of POST /api/v1/colorize */
@@ -34,6 +47,22 @@ export interface ColorizeResponse {
   model_variant?: string;
   device?: string;
   fallback_mode: boolean;
+  quality_preset?: string;
+  edge_refinement_applied?: boolean;
+  shadow_protection_applied?: boolean;
+  color_grading_preset?: string;
+  sharpening_applied?: boolean;
+  sharpening_strength?: number;
+  chroma_strength?: number;
+  timing_breakdown?: {
+    preprocess_ms?: number;
+    inference_ms?: number;
+    refinement_ms?: number;
+    grading_ms?: number;
+    sharpening_ms?: number;
+    postprocess_ms?: number;
+    total_ms?: number;
+  };
   image_base64: string;
 }
 
@@ -93,6 +122,22 @@ export interface ColorizeResult {
   device?: string;
   fallbackMode: boolean;
   requestId: string;
+  qualityPreset?: string;
+  edgeRefinementApplied?: boolean;
+  shadowProtectionApplied?: boolean;
+  colorGradingPreset?: string;
+  sharpeningApplied?: boolean;
+  sharpeningStrength?: number;
+  chromaStrength?: number;
+  timingBreakdown?: {
+    preprocess_ms?: number;
+    inference_ms?: number;
+    refinement_ms?: number;
+    grading_ms?: number;
+    sharpening_ms?: number;
+    postprocess_ms?: number;
+    total_ms?: number;
+  };
 }
 
 /** Structured, user-safe error raised by the API layer. */

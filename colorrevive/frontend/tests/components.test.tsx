@@ -66,6 +66,22 @@ describe("SettingsPanel", () => {
       screen.getByRole("button", { name: /colorize/i }),
     ).toBeDisabled();
   });
+
+  it("toggles detail sharpening and updates color grading preset", async () => {
+    const { onChange } = setup();
+    const sharpeningCheckbox = screen.getByLabelText(/Detail-Preserving Sharpening/i);
+    expect(sharpeningCheckbox).toBeChecked();
+    await userEvent.click(sharpeningCheckbox);
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sharpening: false }),
+    );
+
+    const gradingSelect = screen.getByLabelText(/Natural Color Grading Preset/i);
+    await userEvent.selectOptions(gradingSelect, "cinematic");
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ colorGrading: "cinematic" }),
+    );
+  });
 });
 
 describe("ProcessingState", () => {

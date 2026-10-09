@@ -34,6 +34,7 @@ colorrevive/sample-data/*-colorized.png
 colorrevive/sample-data/*-result.png
 colorrevive/sample-data/output-*
 colorrevive/sample-data/test_*
+colorrevive/sample-data/cheetah_*.png
 
 # Environment & secrets
 .env

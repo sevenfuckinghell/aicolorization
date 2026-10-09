@@ -6,7 +6,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-Quality = Literal["standard", "high"]
+Quality = Literal["standard", "high", "maximum"]
 OutputFormat = Literal["png", "jpeg"]
 
 
@@ -33,6 +33,14 @@ class ColorizeResponse(BaseModel):
     model_variant: Optional[str] = None
     device: Optional[str] = None
     fallback_mode: bool
+    quality_preset: Optional[str] = None
+    edge_refinement_applied: Optional[bool] = None
+    shadow_protection_applied: Optional[bool] = None
+    color_grading_preset: Optional[str] = None
+    sharpening_applied: Optional[bool] = None
+    sharpening_strength: Optional[float] = None
+    chroma_strength: Optional[float] = None
+    timing_breakdown: Optional[dict[str, float]] = None
     image_base64: Optional[str] = None
 
 

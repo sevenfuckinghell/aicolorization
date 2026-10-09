@@ -87,6 +87,24 @@ export function colorizeImage(
   if (settings.chromaStrength !== undefined) {
     form.append("chroma_strength", String(settings.chromaStrength));
   }
+  if (settings.blackPreserve !== undefined) {
+    form.append("black_preserve", String(settings.blackPreserve));
+  }
+  if (settings.edgeRefinement !== undefined) {
+    form.append("edge_refinement", String(settings.edgeRefinement));
+  }
+  if (settings.modelVariant) {
+    form.append("model_variant", settings.modelVariant);
+  }
+  if (settings.colorGrading) {
+    form.append("color_grading", settings.colorGrading);
+  }
+  if (settings.sharpening !== undefined) {
+    form.append("sharpening", String(settings.sharpening));
+  }
+  if (settings.sharpeningStrength !== undefined) {
+    form.append("sharpening_strength", String(settings.sharpeningStrength));
+  }
 
   return new Promise<ColorizeResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import time
+from typing import Optional
 
 import numpy as np
 from fastapi import APIRouter, File, Form, Request, UploadFile
@@ -53,6 +54,13 @@ async def colorize(
     output_format: OutputFormat = Form("png"),
     chroma_strength: str = Form("1.0"),
     black_preserve: str = Form("true"),
+    edge_refinement: str = Form("true"),
+    model_variant: str = Form(""),
+    color_grading: str = Form("natural"),
+    sharpening: str = Form("true"),
+    sharpening_strength: str = Form("0.35"),
+    sharpening_radius: str = Form("1.0"),
+    sharpening_threshold: str = Form("3.0"),
 ):
     settings = request.app.state.settings
     model = request.app.state.model
@@ -69,6 +77,29 @@ async def colorize(
         except (ValueError, TypeError):
             chroma_val = settings.color_chroma_strength
         black_val = _parse_bool(black_preserve, "black_preserve") if black_preserve is not None else settings.color_black_preserve
+        edge_ref_val = _parse_bool(edge_refinement, "edge_refinement") if edge_refinement is not None else settings.color_edge_refinement
+
+        try:
+            sharp_flag = _parse_bool(sharpening, "sharpening") if sharpening is not None else settings.detail_sharpening
+        except Exception:
+            sharp_flag = settings.detail_sharpening
+
+        try:
+            sharp_str_val = float(sharpening_strength) if sharpening_strength is not None else settings.sharpening_strength
+        except (ValueError, TypeError):
+            sharp_str_val = settings.sharpening_strength
+
+        try:
+            sharp_rad_val = float(sharpening_radius) if sharpening_radius is not None else settings.sharpening_radius
+        except (ValueError, TypeError):
+            sharp_rad_val = settings.sharpening_radius
+
+        try:
+            sharp_th_val = float(sharpening_threshold) if sharpening_threshold is not None else settings.sharpening_threshold
+        except (ValueError, TypeError):
+            sharp_th_val = settings.sharpening_threshold
+
+        grading_val = color_grading.strip().lower() if color_grading and color_grading.strip() else settings.color_grading_preset
 
         data = await image.read()
         declared_mime = image.content_type
@@ -93,6 +124,13 @@ async def colorize(
                 output_format=output_format,
                 chroma_strength=chroma_val,
                 black_preserve=black_val,
+                edge_refinement=edge_ref_val,
+                model_variant=model_variant.strip() if model_variant and model_variant.strip() else None,
+                color_grading=grading_val,
+                sharpening=sharp_flag,
+                sharpening_strength=sharp_str_val,
+                sharpening_radius=sharp_rad_val,
+                sharpening_threshold=sharp_th_val,
             )
 
             safe_stem = image_service.sanitize_filename(image.filename)
@@ -111,7 +149,7 @@ async def colorize(
                 endpoint="/api/v1/colorize",
                 processing_time_ms=elapsed_ms,
                 width=output.width, height=output.height,
-                model=output.model_name, device=model.metadata()["device"],
+                model=output.model_name, device=output.device,
                 fallback_mode=output.fallback_mode,
             )
 
@@ -143,6 +181,14 @@ async def colorize(
                 model_variant=output.model_variant,
                 device=output.device,
                 fallback_mode=output.fallback_mode,
+                quality_preset=output.quality_preset,
+                edge_refinement_applied=output.edge_refinement_applied,
+                shadow_protection_applied=output.shadow_protection_applied,
+                color_grading_preset=output.color_grading_preset,
+                sharpening_applied=output.sharpening_applied,
+                sharpening_strength=output.sharpening_strength,
+                chroma_strength=output.chroma_strength,
+                timing_breakdown=output.timing_breakdown,
                 image_base64=b64,
             )
     except ApiError as exc:

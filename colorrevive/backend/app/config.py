@@ -31,8 +31,17 @@ class Settings(BaseSettings):
     ddcolor_input_size: int = 512
     ddcolor_high_size: int = 768
     ddcolor_model_dir: str = "./models"
-    color_chroma_strength: float = 1.0  # 1.0 = raw DDColor prediction
+    color_chroma_strength: float = 1.0  # 1.0 = raw DDColor prediction (100%)
     color_black_preserve: bool = True   # Attenuates chroma in deep shadows and specular highlights
+    color_edge_refinement: bool = True  # Edge-aware guided chrominance refinement
+
+    # Detail Sharpening & Natural Color Grading Configuration
+    detail_sharpening: bool = True
+    sharpening_strength: float = 0.35
+    sharpening_radius: float = 1.0
+    sharpening_threshold: float = 3.0
+    color_grading_preset: str = "natural"  # "natural" | "vivid" | "cinematic" | "original_ai"
+    denoise_enabled: bool = False
 
     # Legacy/swappable model options
     model_checkpoint_path: str = "./checkpoints/colorization.pt"

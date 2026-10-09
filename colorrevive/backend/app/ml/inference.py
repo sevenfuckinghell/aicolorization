@@ -50,6 +50,7 @@ class ColorizationModel:
                 high_input_size=settings.high_input_size,
                 chroma_strength=settings.color_chroma_strength,
                 black_preserve=settings.color_black_preserve,
+                edge_refinement=settings.color_edge_refinement,
             )
         else:
             self._engine = None
@@ -142,18 +143,24 @@ class ColorizationModel:
         quality: str = "standard",
         chroma_strength: float | None = None,
         black_preserve: bool | None = None,
+        edge_refinement: bool | None = None,
+        model_variant: str | None = None,
+        return_metadata: bool = False,
         **kwargs: Any,
-    ) -> np.ndarray:
+    ) -> np.ndarray | tuple[np.ndarray, dict[str, Any]]:
         """Run colorization inference.
 
         Args:
             image: H x W x 3 uint8 RGB array (or 2D grayscale array).
-            quality: 'standard' or 'high'.
+            quality: 'standard', 'high', or 'maximum'.
             chroma_strength: Multiplier for chrominance intensity.
             black_preserve: Smoothly attenuates chrominance in deep shadows and specular highlights.
+            edge_refinement: Edge-aware guided chrominance refinement.
+            model_variant: Model variant name or checkpoint.
+            return_metadata: Whether to return timing/configuration metadata.
 
         Returns:
-            H x W x 3 uint8 RGB array with predicted colors at original dimensions.
+            H x W x 3 uint8 RGB array or (RGB array, metadata).
         """
         # Ensure image is in RGB uint8 format (H, W, 3)
         rgb_input = self._ensure_rgb(image)
@@ -164,10 +171,17 @@ class ColorizationModel:
                 quality=quality,
                 chroma_strength=chroma_strength,
                 black_preserve=black_preserve,
+                edge_refinement=edge_refinement,
+                model_variant=model_variant,
+                return_metadata=return_metadata,
+                **kwargs,
             )
 
         if self.fallback_active():
-            return self._predict_fallback(rgb_input)
+            fb_out = self._predict_fallback(rgb_input)
+            if return_metadata:
+                return fb_out, {"fallback": True, "total_ms": 1.0}
+            return fb_out
 
         raise ModelUnavailableError(
             "The DDColor model could not be loaded. Check model configuration and network/model cache."

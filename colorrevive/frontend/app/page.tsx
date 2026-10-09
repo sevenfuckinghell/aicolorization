@@ -174,6 +174,14 @@ export default function HomePage() {
         device: response.device,
         fallbackMode: response.fallback_mode,
         requestId: response.request_id,
+        qualityPreset: response.quality_preset,
+        edgeRefinementApplied: response.edge_refinement_applied,
+        shadowProtectionApplied: response.shadow_protection_applied,
+        colorGradingPreset: response.color_grading_preset,
+        sharpeningApplied: response.sharpening_applied,
+        sharpeningStrength: response.sharpening_strength,
+        chromaStrength: response.chroma_strength,
+        timingBreakdown: response.timing_breakdown,
       };
       setResult(nextResult);
       setPhase("idle");
@@ -425,11 +433,49 @@ export default function HomePage() {
                     )}
                     <div>
                       <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                        Quality Preset
+                      </dt>
+                      <dd className="capitalize text-xs font-medium">
+                        {result.qualityPreset ?? "Standard"}
+                        {result.edgeRefinementApplied && (
+                          <span className="ml-1 text-[10px] text-accent font-normal">
+                            (Edge-Guided)
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-muted">
                         Format
                       </dt>
                       <dd>{result.mimeType}</dd>
                     </div>
-                    <div className="col-span-2">
+                    {result.colorGradingPreset && (
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                          Color Grading
+                        </dt>
+                        <dd className="capitalize text-xs font-medium">
+                          {result.colorGradingPreset.replace("_", " ")}
+                        </dd>
+                      </div>
+                    )}
+                    {result.sharpeningApplied !== undefined && (
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted">
+                          Sharpening
+                        </dt>
+                        <dd className="text-xs font-medium">
+                          {result.sharpeningApplied ? `Active (${result.sharpeningStrength ?? 0.35})` : "Disabled"}
+                        </dd>
+                      </div>
+                    )}
+                    {result.timingBreakdown && (
+                      <div className="col-span-2 sm:col-span-3 text-[11px] text-muted border-t border-line/40 pt-1.5 mt-1 font-mono">
+                        Latency: Preprocess {result.timingBreakdown.preprocess_ms}ms · Inference {result.timingBreakdown.inference_ms}ms · Refinement {result.timingBreakdown.refinement_ms}ms {result.timingBreakdown.sharpening_ms ? `· Sharpening ${result.timingBreakdown.sharpening_ms}ms` : ""}
+                      </div>
+                    )}
+                    <div className="col-span-2 sm:col-span-3">
                       <dt className="text-xs font-medium uppercase tracking-wide text-muted">
                         Request ID
                       </dt>

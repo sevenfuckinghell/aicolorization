@@ -20,6 +20,9 @@ def _post(client, data: bytes, filename="photo.png", content_type="image/png", *
         "denoise": form.get("denoise", "false"),
         "output_format": form.get("output_format", "png"),
     }
+    for k, v in form.items():
+        if k not in fields and v is not None:
+            fields[k] = str(v)
     return client.post(
         "/api/v1/colorize",
         files={"image": (filename, data, content_type)},
@@ -138,3 +141,36 @@ def test_model_unavailable_returns_503(monkeypatch, tmp_path):
         body = response.json()
         assert body["success"] is False
         assert body["error"]["code"] == "MODEL_UNAVAILABLE"
+
+
+def test_high_and_maximum_quality_api_requests(client):
+    """Verify that quality=high and quality=maximum return valid responses with timing metadata."""
+    for q in ["high", "maximum"]:
+        response = _post(
+            client,
+            make_image_bytes(50, 50),
+            quality=q,
+            edge_refinement="true",
+            chroma_strength="1.1",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["quality_preset"] == q
+        assert body["edge_refinement_applied"] is True
+        assert "timing_breakdown" in body
+        assert body["width"] == 50 and body["height"] == 50
+
+
+def test_edge_refinement_toggle(client):
+    """Verify edge_refinement flag is accepted and reported in output."""
+    response = _post(
+        client,
+        make_image_bytes(40, 40),
+        quality="standard",
+        edge_refinement="false",
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["edge_refinement_applied"] is False
+
