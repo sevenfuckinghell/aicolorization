@@ -76,10 +76,10 @@ describe("SettingsPanel", () => {
       expect.objectContaining({ sharpening: false }),
     );
 
-    const gradingSelect = screen.getByLabelText(/Natural Color Grading Preset/i);
-    await userEvent.selectOptions(gradingSelect, "cinematic");
+    const gradingSelect = screen.getByLabelText(/Color Grading Preset/i);
+    await userEvent.selectOptions(gradingSelect, "historical");
     expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ colorGrading: "cinematic" }),
+      expect.objectContaining({ colorGrading: "historical" }),
     );
   });
 });

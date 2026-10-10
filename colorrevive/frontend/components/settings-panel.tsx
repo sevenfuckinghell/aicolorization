@@ -114,7 +114,7 @@ export function SettingsPanel({
       {/* Color Grading Preset */}
       <div className="mt-4">
         <label htmlFor={gradingId} className="block text-sm font-medium">
-          Natural Color Grading Preset
+          Color Grading Preset
         </label>
         <select
           id={gradingId}
@@ -122,13 +122,13 @@ export function SettingsPanel({
           onChange={(e) => set("colorGrading", e.target.value as any)}
           className="mt-1.5 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
         >
-          <option value="natural">Natural (Photographic balance & realistic highlights — Recommended)</option>
-          <option value="vivid">Vivid (Richer color separation without neon cast)</option>
-          <option value="cinematic">Cinematic (Filmic tonal latitude & soft highlight roll-off)</option>
-          <option value="original_ai">Original AI (Unmodified raw neural DDColor prediction)</option>
+          <option value="natural">Natural — Default (Balanced saturation, realistic contrast & neutral whites)</option>
+          <option value="historical">Historical (Subtle, restrained vintage tones — No fake sepia)</option>
+          <option value="vivid">Vivid (Richer color separation with soft-knee gamut protection)</option>
+          <option value="raw_ai">Raw AI (Unmodified raw neural model prediction)</option>
         </select>
         <p className="mt-1 text-[11px] text-muted">
-          Applies color-science grading directly in CIELAB space without fake tints or global hue shifts.
+          Applies photographic color science in CIELAB space without fake tints or hue shifts. Note: Grading enhances visual plausibility; it does not claim to recover unrecorded original colors.
         </p>
       </div>
 

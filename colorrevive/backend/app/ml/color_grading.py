@@ -39,13 +39,15 @@ def apply_color_grading(
         Tuple of (graded_lab_float32, metadata_dict).
     """
     preset_clean = preset.strip().lower() if preset else "natural"
-    if preset_clean not in ("natural", "vivid", "cinematic", "original_ai"):
+    if preset_clean in ("raw_ai", "original_ai", "raw"):
+        preset_clean = "raw_ai"
+    elif preset_clean not in ("natural", "historical", "vivid", "cinematic"):
         preset_clean = "natural"
 
-    # Fast bypass for raw neural prediction
-    if preset_clean == "original_ai":
+    # Fast bypass for raw neural prediction (strictly unmodified)
+    if preset_clean == "raw_ai":
         return img_lab.copy(), {
-            "color_grading_preset": "original_ai",
+            "color_grading_preset": "raw_ai",
             "effective_chroma_strength": 1.0,
         }
 
@@ -68,6 +70,27 @@ def apply_color_grading(
         L_graded = (L_norm * 0.85 + L_curve * 0.15) * 100.0
         out_lab[..., 0] = np.clip(L_graded, 0.0, 100.0)
 
+    elif preset_clean == "historical":
+        # Subtle, restrained color grading suitable for old photographs,
+        # without automatically imposing fake sepia or brown wash.
+        # 1. Gentle silver-halide tonal curve (soft toe lift to preserve shadow detail)
+        L_norm = L / 100.0
+        L_hist = (L_norm ** 0.96 * 0.88 + L_norm * 0.12) * 100.0
+        out_lab[..., 0] = np.clip(L_hist, 0.0, 100.0)
+
+        # 2. Restrained chrominance (historical pigments and vintage emulsions have softer, more muted color density)
+        hist_cs = cs * 0.85
+        ab_scaled = ab * hist_cs
+
+        # 3. Soft chroma compression to prevent modern synthetic saturation
+        chroma = np.sqrt(ab_scaled[..., 0] ** 2 + ab_scaled[..., 1] ** 2)
+        hist_knee = 48.0
+        excess = chroma > hist_knee
+        if np.any(excess):
+            scale = np.ones_like(chroma)
+            scale[excess] = (hist_knee + (chroma[excess] - hist_knee) * 0.3) / chroma[excess]
+            ab_scaled = ab_scaled * scale[..., None]
+
     elif preset_clean == "vivid":
         # Moderate vibrancy boost (12% extra in midtones, well below neon clipping)
         vivid_boost = 1.12 * cs
@@ -88,7 +111,6 @@ def apply_color_grading(
     elif preset_clean == "cinematic":
         # Filmic toe and shoulder: rich black depth and soft highlight roll-off
         L_norm = L / 100.0
-        # Photographic film toe/shoulder
         toe_shoulder = (
             L_norm ** 1.08 * (1.0 - np.exp(-3.5 * L_norm))
             / (1.0 - np.exp(-3.5))

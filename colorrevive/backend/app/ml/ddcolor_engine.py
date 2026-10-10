@@ -110,10 +110,16 @@ class DDColorEngine:
                     local_files_only=True,
                 )
             except Exception:
-                model = DDColorHF.from_pretrained(
-                    repo_id,
-                    cache_dir=str(cache_dir) if cache_dir else None,
-                )
+                try:
+                    model = DDColorHF.from_pretrained(
+                        repo_id,
+                        local_files_only=True,
+                    )
+                except Exception:
+                    model = DDColorHF.from_pretrained(
+                        repo_id,
+                        cache_dir=str(cache_dir) if cache_dir else None,
+                    )
             model = model.to(self.device)
 
         model.eval()

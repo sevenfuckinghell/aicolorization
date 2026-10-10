@@ -128,29 +128,25 @@ class ColorizationPipeline:
         height, width = img_bgr.shape[:2]
         q_norm = quality.lower().strip()
 
-        # Resolve sharpening default based on quality preset if not explicitly specified
-        if sharpening is None:
+        # Resolve grading default based on input
+        effective_grading = color_grading.strip().lower() if color_grading else "natural"
+        if effective_grading in ("raw_ai", "original_ai", "raw"):
+            effective_grading = "raw_ai"
+
+        # Resolve sharpening default: bypassed completely for raw_ai
+        if effective_grading == "raw_ai":
+            effective_sharpening = False
+            effective_sharp_strength = 0.0
+        elif sharpening is None:
             if q_norm == "standard":
                 effective_sharpening = False
+                effective_sharp_strength = 0.25
             else:
                 effective_sharpening = True
+                effective_sharp_strength = 0.45 if q_norm == "maximum" else 0.35
         else:
             effective_sharpening = bool(sharpening)
-
-        if sharpening_strength is None:
-            if q_norm == "maximum":
-                effective_sharp_strength = 0.45
-            elif q_norm == "high":
-                effective_sharp_strength = 0.35
-            else:
-                effective_sharp_strength = 0.25
-        else:
-            effective_sharp_strength = float(sharpening_strength)
-
-        # Resolve grading default based on quality preset if not explicitly specified
-        effective_grading = color_grading.strip().lower() if color_grading else "natural"
-        if q_norm == "standard" and not color_grading:
-            effective_grading = "original_ai"
+            effective_sharp_strength = float(sharpening_strength) if sharpening_strength is not None else 0.35
 
         # -------------------------------------------------------------
         # 1. Preprocessing (Preserve original L at native resolution)

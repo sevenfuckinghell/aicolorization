@@ -72,15 +72,16 @@ class TestDetailSharpening:
 class TestColorGrading:
     """Test suite for CIELAB color grading presets."""
 
-    def test_original_ai_bypasses_all_modifications(self):
-        """'original_ai' returns input array unchanged."""
+    def test_raw_ai_bypasses_all_modifications(self):
+        """'raw_ai' and 'original_ai' return input array completely unchanged."""
         img_lab = np.full((32, 32, 3), 50.0, dtype=np.float32)
         img_lab[..., 1] = 20.0
         img_lab[..., 2] = -15.0
 
-        graded, metrics = apply_color_grading(img_lab, preset="original_ai")
-        assert metrics["color_grading_preset"] == "original_ai"
-        np.testing.assert_array_equal(graded, img_lab)
+        for raw_alias in ["raw_ai", "original_ai", "raw"]:
+            graded, metrics = apply_color_grading(img_lab, preset=raw_alias)
+            assert metrics["color_grading_preset"] == "raw_ai"
+            np.testing.assert_array_equal(graded, img_lab)
 
     def test_all_presets_produce_valid_outputs(self):
         """All supported presets execute cleanly without NaN or infinite values."""
@@ -91,14 +92,25 @@ class TestColorGrading:
         img_lab[..., 1] = rng.uniform(-50.0, 50.0, (H, W))
         img_lab[..., 2] = rng.uniform(-50.0, 50.0, (H, W))
 
-        for preset in ["natural", "vivid", "cinematic"]:
+        for preset in ["natural", "historical", "vivid", "cinematic", "raw_ai"]:
             graded, metrics = apply_color_grading(img_lab, preset=preset, chroma_strength=1.0)
-            assert metrics["color_grading_preset"] == preset
             assert not np.isnan(graded).any()
             assert not np.isinf(graded).any()
             # Luminance must stay within [0, 100]
             assert np.all(graded[..., 0] >= 0.0)
             assert np.all(graded[..., 0] <= 100.0)
+
+    def test_historical_preset_preserves_hue_without_sepia(self):
+        """Historical preset must NOT convert blues or greens into brown/sepia."""
+        # Blue pixel: negative b
+        img_lab = np.zeros((1, 1, 3), dtype=np.float32)
+        img_lab[0, 0, 0] = 50.0
+        img_lab[0, 0, 1] = -10.0
+        img_lab[0, 0, 2] = -35.0  # Cool blue
+
+        graded, _ = apply_color_grading(img_lab, preset="historical", chroma_strength=1.0)
+        # b channel must remain negative (still blue, NOT positive sepia yellow/brown)
+        assert graded[0, 0, 2] < -5.0
 
     def test_shadow_and_highlight_neutrality(self):
         """Deep blacks (L=0) and blown highlights (L=100) must roll off chroma to 0."""

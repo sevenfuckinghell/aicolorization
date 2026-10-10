@@ -2,7 +2,7 @@
 
 export type Quality = "standard" | "high" | "maximum";
 export type OutputFormat = "png" | "jpeg";
-export type ColorGradingPreset = "natural" | "vivid" | "cinematic" | "original_ai";
+export type ColorGradingPreset = "natural" | "historical" | "vivid" | "raw_ai" | "cinematic" | "original_ai";
 
 export interface ColorizeSettings {
   quality: Quality;
